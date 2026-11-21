@@ -12,7 +12,12 @@ intents.message_content = True  # Must be enabled in Dev Portal
 # ==========================================
 # CONSTANTS & HELPER FUNCTIONS
 # ==========================================
-BLUR_ROLE_ID = 1573815516982935692 
+BLUR_ROLE_ID = 1573815516982935692
+
+# Single source of truth for which domains trigger a repost
+SOCIAL_LINK_RE = re.compile(
+    r'https?://(?:www\.)?(twitter\.com|x\.com|tiktok\.com|instagram\.com)'
+)
 
 def fix_social_links(text: str) -> str:
     """Finds social media links and replaces them with embedding-friendly domains."""
@@ -23,6 +28,25 @@ def fix_social_links(text: str) -> str:
     # Instagram
     text = re.sub(r'https?://(?:www\.)?(instagram\.com)', 'https://toinstagram.com', text)
     return text
+
+def _is_link_spoilered(text: str, match: re.Match) -> bool:
+    """True if the given URL match sits entirely inside a ||...|| spoiler region."""
+    # The link must start inside an open spoiler (odd number of '||' before it)...
+    if text[:match.start()].count("||") % 2 != 1:
+        return False
+    # ...and a closing '||' must appear after it. URLs never contain '||',
+    # so any '||' after the match's end closes the current spoiler.
+    return "||" in text[match.end():]
+
+def all_social_links_spoilered(text: str) -> bool:
+    """
+    True if the text contains at least one social link AND every single one
+    is already wrapped in ||...||.
+    """
+    matches = list(SOCIAL_LINK_RE.finditer(text))
+    if not matches:
+        return False
+    return all(_is_link_spoilered(text, m) for m in matches)
 
 def is_keto(message: Message) -> bool:
     """True if the message was authored by the Keto bot."""
@@ -154,6 +178,11 @@ class MyClient(discord.Client):
                     print(f"Keto reply: could not fetch referenced message: {e}")
                     return
                 if any(r.id == BLUR_ROLE_ID for r in ref.role_mentions):
+                    # NEW: if the user already spoilered every link themselves,
+                    # treat the referenced message as if the blur role weren't
+                    # mentioned at all — leave Keto's reply alone.
+                    if all_social_links_spoilered(ref.content):
+                        return
                     try:
                         await message.delete()
                         print("Deleted Keto's reply to a blurred message.")
@@ -168,12 +197,14 @@ class MyClient(discord.Client):
 
         # Define our checks
         has_blur_role = any(role.id == BLUR_ROLE_ID for role in message.role_mentions)
-        has_social_link = re.search(r'https?://(?:www\.)?(twitter\.com|x\.com|tiktok\.com|instagram\.com)', message.content)
+        has_social_link = bool(SOCIAL_LINK_RE.search(message.content))
+        links_all_spoilered = all_social_links_spoilered(message.content)
 
         # ==========================================
-        # 1. HANDLE SOCIAL LINKS (Only when Guro & Ryona role is tagged)
+        # 1. HANDLE SOCIAL LINKS (Only when Guro & Ryona role is tagged
+        #    AND the user hasn't already spoilered the link(s) themselves)
         # ==========================================
-        if has_social_link and has_blur_role:
+        if has_social_link and has_blur_role and not links_all_spoilered:
             # Suppress the original embed (Requires Manage Messages)
             try:
                 await message.edit(suppress=True)
