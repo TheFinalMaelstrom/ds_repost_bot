@@ -1,49 +1,258 @@
 import discord
 from discord import Message
 import os
+import re
+import io
 from dotenv import load_dotenv
 
 # Set up the intents
 intents = discord.Intents.default()
 intents.message_content = True  # Must be enabled in Dev Portal
 
+# ==========================================
+# CONSTANTS & HELPER FUNCTIONS
+# ==========================================
+BLUR_ROLE_ID = 1573815516982935692 
+
+def fix_social_links(text: str) -> str:
+    """Finds social media links and replaces them with embedding-friendly domains."""
+    # Twitter / X
+    text = re.sub(r'https?://(?:www\.)?(twitter\.com|x\.com)', 'https://cunnyx.com', text)
+    # TikTok
+    text = re.sub(r'https?://(?:www\.)?(tiktok\.com)', 'https://tnktok.com', text)
+    # Instagram
+    text = re.sub(r'https?://(?:www\.)?(instagram\.com)', 'https://toinstagram.com', text)
+    return text
+
+def is_keto(message: Message) -> bool:
+    """True if the message was authored by the Keto bot."""
+    if not message.author.bot:
+        return False
+    # Preferred: set KETO_BOT_ID in .env for a 100 % reliable match
+    keto_id = int(os.getenv("KETO_BOT_ID", "0") or 0)
+    if keto_id:
+        return message.author.id == keto_id
+    # Fallback: match by bot username
+    return "keto" in message.author.name.lower()
+
+async def assign_role(interaction: discord.Interaction, role_id_str: str):
+    try:
+        role_id = int(role_id_str)
+        if interaction.guild is None:
+            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
+            return
+
+        role = interaction.guild.get_role(role_id)
+        if not role:
+            await interaction.response.send_message("❌ Error: Role not found. Please check the Role ID in the code.", ephemeral=True)
+            return
+
+        member = interaction.user
+        await member.add_roles(role) # type: ignore
+        await interaction.response.edit_message(content=f"✅ You have been given the **{role.name}** role!", view=None)
+        
+    except ValueError:
+        await interaction.response.send_message("❌ Error: The Role ID in the code is invalid (not a number).", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ I don't have permission to give you this role. Make sure my bot role is higher in the Role settings.", ephemeral=True)
+
+# ==========================================
+# BRANCH 1: GAMES
+# ==========================================
+class GamesView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.select(
+        placeholder="Choose your main game...",
+        options=[
+            discord.SelectOption(label="Zenless Zone Zero", value="1532406509810487439"),
+            discord.SelectOption(label="Pokemon", value="1558776797141925978"),
+            discord.SelectOption(label="Fate Series", value="1557308005735727164"),
+            discord.SelectOption(label="Blue Archive", value="1572323433960702153")
+        ]
+    )
+    async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+        await assign_role(interaction, select.values[0])
+
+# ==========================================
+# BRANCH 2: KINKS
+# ==========================================
+class KinksView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.select(
+        placeholder="Choose your interest...",
+        options=[
+            discord.SelectOption(label="Feet", value="1569713677215469662"),
+            discord.SelectOption(label="Futanari", value="1566145637270167632"),
+            discord.SelectOption(label="Yuri", value="1526456128458985542"),
+            discord.SelectOption(label="Guro & Ryona", value="1573815516982935692")
+        ]
+    )
+    async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+        await assign_role(interaction, select.values[0])
+
+# ==========================================
+# BRANCH 3: MUSIC
+# ==========================================
+class MusicView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.select(
+        placeholder="Choose your favorite genre...",
+        options=[
+            discord.SelectOption(label="Vocaloid", value="1573812371137372170"),
+            discord.SelectOption(label="R&B", value="1573812584446955681"),
+            discord.SelectOption(label="Rock", value="1573812659319742605")
+        ]
+    )
+    async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+        await assign_role(interaction, select.values[0])
+
+# ==========================================
+# MAIN MENU
+# ==========================================
+class MainRoleMenuView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Games", style=discord.ButtonStyle.primary, emoji="🎮")
+    async def games_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Please select your game:", view=GamesView(), ephemeral=True)
+
+    @discord.ui.button(label="Kinks", style=discord.ButtonStyle.danger, emoji="🎀")
+    async def kinks_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Please select your interest:", view=KinksView(), ephemeral=True)
+
+    @discord.ui.button(label="Music", style=discord.ButtonStyle.success, emoji="🎵")
+    async def music_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Please select your music genre:", view=MusicView(), ephemeral=True)
+
+# ==========================================
+# MAIN BOT CLASS
+# ==========================================
 class MyClient(discord.Client):
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
         print('------')
 
     async def on_message(self, message: Message):
-        # Don't respond to our own messages
-        if message.author == self.user:
+        if message.author == self.user or message.guild is None:
             return
 
-        # Check if the message mentions the bot or starts with !relay
+        # ==========================================
+        # 0. DELETE ANY KETO REPLY to a @Guro & Ryona message
+        # ==========================================
+        if is_keto(message):
+            if message.reference and message.reference.message_id:
+                try:
+                    ref = await message.channel.fetch_message(message.reference.message_id)
+                except (discord.NotFound, discord.HTTPException) as e:
+                    print(f"Keto reply: could not fetch referenced message: {e}")
+                    return
+                if any(r.id == BLUR_ROLE_ID for r in ref.role_mentions):
+                    try:
+                        await message.delete()
+                        print("Deleted Keto's reply to a blurred message.")
+                    except discord.Forbidden:
+                        print("Missing 'Manage Messages' to delete Keto's reply.")
+                    except discord.HTTPException as e:
+                        print(f"Failed to delete Keto's reply: {e}")
+            # Never let other handlers process Keto's own output
+            return
+
         content_lower = message.content.lower()
-        is_command = "relay" in content_lower and (self.user.mentioned_in(message) or content_lower.startswith("!relay"))
+
+        # Define our checks
+        has_blur_role = any(role.id == BLUR_ROLE_ID for role in message.role_mentions)
+        has_social_link = re.search(r'https?://(?:www\.)?(twitter\.com|x\.com|tiktok\.com|instagram\.com)', message.content)
+
+        # ==========================================
+        # 1. HANDLE SOCIAL LINKS (Only when Guro & Ryona role is tagged)
+        # ==========================================
+        if has_social_link and has_blur_role:
+            # Suppress the original embed (Requires Manage Messages)
+            try:
+                await message.edit(suppress=True)
+            except discord.Forbidden:
+                print("Missing 'Manage Messages' permission to suppress original embed.")
+            except Exception as e:
+                print(f"Could not suppress embed: {e}")
+
+            fixed_content = fix_social_links(message.content)
+            role = message.guild.get_role(BLUR_ROLE_ID)
+            role_name = role.name if role else "Sensitive Content"
+
+            # Wrapping the link in || spoiler tags usually blurs the embed
+            repost_text = (
+                f"⚠️ **{message.author.display_name} triggered `{role_name}`:**\n"
+                f"||{fixed_content}||"
+            )
+            await message.channel.send(repost_text)
+            return
+
+        # ==========================================
+        # 2. HANDLE BLUR ROLE (For direct image attachments)
+        # ==========================================
+        if has_blur_role and message.attachments:
+            images = [a for a in message.attachments if a.content_type and a.content_type.startswith('image/')]
+            
+            if images:
+                spoiled_files = []
+                for img in images:
+                    img_bytes = await img.read()
+                    spoiled_files.append(discord.File(io.BytesIO(img_bytes), filename=img.filename, spoiler=True))
+                
+                try:
+                    await message.delete()
+                except discord.Forbidden:
+                    pass # We'll just repost it anyway
+                
+                role = message.guild.get_role(BLUR_ROLE_ID)
+                role_name = role.name if role else "Sensitive Content"
+                
+                warning = f"⚠️ **{message.author.mention} triggered the `{role_name}` role.**\n"
+                await message.channel.send(content=warning, files=spoiled_files)
+                return 
+
+        # ==========================================
+        # 3. COMMANDS (!roles and !relay)
+        # ==========================================
+        if content_lower.startswith("!roles"):
+            embed = discord.Embed(
+                title="Select Your Roles",
+                description="Click the buttons below to choose your roles!",
+                color=discord.Color.blue()
+            )
+            await message.channel.send(embed=embed, view=MainRoleMenuView())
+            return 
+
+        is_command = "relay" in content_lower and (self.user.mentioned_in(message) or content_lower.startswith("!relay")) # type: ignore
 
         if not is_command:
             return
 
-        # 1. Check if the command was used as a reply
         if not message.reference:
             await message.reply("You must use this command as a reply to the message you want to relay.")
             return
 
-        # 2. Fetch the replied-to message
+        assert message.reference is not None
+
         try:
             replied_message = await message.channel.fetch_message(message.reference.message_id)
         except discord.NotFound:
             await message.reply("Could not find the original replied message.")
             return
 
-        # 3. Get target thread ID from environment variables
         target_thread_id_str = os.getenv('TARGET_THREAD_ID')
         if not target_thread_id_str:
             await message.reply("Target Thread ID is not configured in the bot's `.env` file.")
             return
 
         try:
-            # Convert the ID string to an integer and find the channel
             target_thread = self.get_channel(int(target_thread_id_str))
             if not target_thread:
                 target_thread = await self.fetch_channel(int(target_thread_id_str))
@@ -51,7 +260,10 @@ class MyClient(discord.Client):
             await message.reply(f"Could not find the target thread. Error: {e}")
             return
 
-        # 4. Prepare content and attachments
+        if not isinstance(target_thread, (discord.TextChannel, discord.Thread, discord.VoiceChannel)):
+            await message.reply("The target channel is not a text channel or thread that I can send messages to.")
+            return
+
         content = replied_message.content
         attachments = replied_message.attachments
 
@@ -59,13 +271,9 @@ class MyClient(discord.Client):
             await message.reply("The replied message has no text or attachments to relay.")
             return
 
-        # --- FIXED: Emoji is outside the brackets, link is bolded ---
         jump_link = f"➡️ **[Jump to original message]({replied_message.jump_url})**"
-        
-        # Combine the author, the jump link, and the original content
         relay_text = f"**Relayed from {replied_message.author.display_name}:**\n{jump_link}\n\n{content}"
 
-        # Download the attachments to re-send them
         files_to_send = []
         for attachment in attachments:
             try:
@@ -74,32 +282,27 @@ class MyClient(discord.Client):
             except Exception as e:
                 print(f"Failed to download attachment: {e}")
 
-        # 5. Send to the read-only thread WITHOUT pinging anyone
         try:
-            # This tells Discord to format mentions visually, but NOT send notifications
             allowed_mentions = discord.AllowedMentions(everyone=False, users=False, roles=False)
-            
-            # Send the message, attachments, and apply the no-ping rule
             await target_thread.send(
                 content=relay_text, 
                 files=files_to_send, 
                 allowed_mentions=allowed_mentions
             )
-            
-            # Optional: React to the user's command to show it succeeded
             await message.add_reaction("✅")
-            
         except discord.Forbidden:
             await message.reply("I do not have permission to send messages in that target thread.")
         except Exception as e:
             await message.reply(f"An error occurred while relaying: {e}")
 
-# Load variables from the .env file
+# ==========================================
+# LOAD ENV AND RUN
+# ==========================================
 load_dotenv()
-
-# Retrieve the token from environment variables
 TOKEN = os.getenv('DISCORD_TOKEN')
 
-# Run the bot
+if TOKEN is None:
+    raise ValueError("DISCORD_TOKEN is missing from the .env file")
+
 client = MyClient(intents=intents)
 client.run(TOKEN)
