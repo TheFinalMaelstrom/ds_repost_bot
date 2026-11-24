@@ -109,7 +109,7 @@ class KinksView(discord.ui.View):
     @discord.ui.select(
         placeholder="Choose your interest...",
         options=[
-            discord.SelectOption(label="Feet", value="1569713677215469662"),
+            discord.SelectOption(label="Lolicon", value="1569713677215469662"),
             discord.SelectOption(label="Futanari", value="1566145637270167632"),
             discord.SelectOption(label="Yuri", value="1526456128458985542"),
             discord.SelectOption(label="Guro & Ryona", value="1573815516982935692")
