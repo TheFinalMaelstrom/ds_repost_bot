@@ -88,12 +88,13 @@ class GamesView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.select(
-        placeholder="Choose your main game...",
+        placeholder="Choose what games you're interested in...",
         options=[
-            discord.SelectOption(label="Zenless Zone Zero", value="1532406509810487439"),
-            discord.SelectOption(label="Pokemon", value="1558776797141925978"),
+            discord.SelectOption(label="Blue Archive", value="1572323433960702153"),
             discord.SelectOption(label="Fate Series", value="1557308005735727164"),
-            discord.SelectOption(label="Blue Archive", value="1572323433960702153")
+            discord.SelectOption(label="Pokemon", value="1558776797141925978"),
+            discord.SelectOption(label="Umamusume", value="1575135905134682143"),
+            discord.SelectOption(label="Zenless Zone Zero", value="1532406509810487439")
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -107,12 +108,13 @@ class KinksView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.select(
-        placeholder="Choose your interest...",
+        placeholder="Choose your interests...",
         options=[
-            discord.SelectOption(label="Lolicon", value="1569713677215469662"),
             discord.SelectOption(label="Futanari", value="1566145637270167632"),
-            discord.SelectOption(label="Yuri", value="1526456128458985542"),
-            discord.SelectOption(label="Guro & Ryona", value="1573815516982935692")
+            discord.SelectOption(label="Guro & Ryona", value="1573815516982935692"),
+            discord.SelectOption(label="Lolicon", value="1569713677215469662"),
+            discord.SelectOption(label="Yaoi & Boys", value="1575135768316477472"),
+            discord.SelectOption(label="Yuri", value="1526456128458985542")
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -126,7 +128,7 @@ class MusicView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.select(
-        placeholder="Choose your favorite genre...",
+        placeholder="Choose your favorite genres...",
         options=[
             discord.SelectOption(label="Vocaloid", value="1573812371137372170"),
             discord.SelectOption(label="R&B", value="1573812584446955681"),
