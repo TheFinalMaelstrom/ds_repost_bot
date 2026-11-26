@@ -111,8 +111,12 @@ class KinksView(discord.ui.View):
         placeholder="Choose your interests...",
         options=[
             discord.SelectOption(label="Futanari", value="1566145637270167632"),
+            discord.SelectOption(label="Furry", value="1573814780089733234"),
+            discord.SelectOption(label="Glasses Girls", value="1575291858102394950"),
             discord.SelectOption(label="Guro & Ryona", value="1573815516982935692"),
             discord.SelectOption(label="Lolicon", value="1569713677215469662"),
+            discord.SelectOption(label="Paizuri & Naizuri", value="1575368350509305926"),
+            discord.SelectOption(label="Shortstacks", value="1575369174266548344"),
             discord.SelectOption(label="Yaoi & Boys", value="1575135768316477472"),
             discord.SelectOption(label="Yuri", value="1526456128458985542")
         ]
